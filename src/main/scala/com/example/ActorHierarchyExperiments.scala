@@ -50,6 +50,7 @@ class PrintMyActorRefActor(context: ActorContext[String]) extends AbstractBehavi
         // context.system = akka://testSystem (Same system, being the same root guardian
         val secondRef = context.spawn(Behaviors.empty[String], "second-actor")
         println(s"Second: $secondRef")
+        // This ---> PrintMyActorRefActor this Actor itself, which is of type Behavior[String], as it's what's being extended
         this
     }
 }
@@ -108,6 +109,7 @@ class MainActorLifecycleTest(context: ActorContext[String]) extends AbstractBeha
  */
 
 object StartStopActor1 {
+  // apply tells you how a StartStopActor1() instance get spawned
   def apply(): Behavior[String] =
     Behaviors.setup(context => new StartStopActor1(context))
 }
@@ -194,6 +196,7 @@ class SupervisedActor(context: ActorContext[String]) extends AbstractBehavior[St
     msg match {
       case "fail" =>
         println("supervised actor fails now")
+        // in this case we are throwing an exception!!! still -> matching with behavior[String] signature
         throw new Exception("I failed!")
     }
 
@@ -226,8 +229,8 @@ class MainForFailureHandlingActor(context: ActorContext[String]) extends Abstrac
 }
 
 object ActorHierarchyExperiments extends App {
-//  val testSystem = ActorSystem(Main(), "testSystem")
-//  testSystem ! "start"
+  val testSystem = ActorSystem(Main(), "testSystem")
+  testSystem ! "start"
 
   // The output is the following
   // ---> Note actors are created under testSystem/user , where testSystem is root guardian. This is the parent of all actors in the system,
