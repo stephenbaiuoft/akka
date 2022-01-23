@@ -37,6 +37,8 @@ object DeviceManager {
     Behaviors.setup(context => new DeviceManager(context))
   }
 
+
+
   final case class ReplyDeviceList(requestId: Long,
                              deviceIds: Set[String])
 
