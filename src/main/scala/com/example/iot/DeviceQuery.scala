@@ -43,6 +43,7 @@ object DeviceGroupQuery {
   trait DGQueryCommand
 
   // We need to create a message that represents the query timeout. We create a simple message CollectionTimeout without any parameters
+  // This is for Query (therefore CollectionTimeout)
   private case object CollectionTimeout extends DGQueryCommand
 
   // Wrapper for Device.RespondTemperature
@@ -68,17 +69,22 @@ class DeviceGroupQuery(deviceIdToActor: Map[String, ActorRef[Device.Command]],
       even if it was already enqueued in the mailbox when the new timer was started.
    */
   // (key, msg, delay)
+  // This will send CollectionTimeout message to Actor itself after 'timeout'
   timers.startSingleTimer(CollectionTimeout, CollectionTimeout, timeout)
 
   // messageAdapter ->
   // we use a messageAdapter that wraps the RespondTemperature in a WrappedRespondTemperature, which extends DeviceGroupQuery.Command
   private val respondTemperatureAdapter = context.messageAdapter(WrappedRespondTemperature.apply)
 
+
   deviceIdToActor.foreach {
     case (deviceId, device) =>
       // keep an eye using context to watch the device in terminated
       // --> Meaning it'll send DeviceTerminated (extends DGQueryCommand
       context.watchWith(device, DeviceTerminated(deviceId))
+      // This is where the logic for querying all deviceIds start
+      // Put in 'respondTemperatureAdapter', replyTo is this actor DMQuery.Command
+      // --> 不然 onMessage怎么能读到 msg呢？？
       device ! Device.ReadTemperature(0, respondTemperatureAdapter)
   }
 
@@ -96,37 +102,53 @@ class DeviceGroupQuery(deviceIdToActor: Map[String, ActorRef[Device.Command]],
     We can receive a DeviceTerminated message for a device actor that has been stopped in the meantime.
     We can reach the deadline and receive a CollectionTimeout.
    */
-  override def onMessage(msg: DGQueryCommand): Behavior[DGQueryCommand] = ???
-//    msg match {
-//      case WrappedRespondTemperature(response) => onRespondTemperature(response)
-//      case DeviceTerminated(deviceId)          => onDeviceTerminated(deviceId)
-//      case CollectionTimeout                   => onCollectionTimout()
-//    }
-//
-//  private def onRespondTemperature(response: Device.RespondTemperature): Behavior[DGQueryCommand] = {
-//    val reading = response.value match {
-//      case Some(value) => Temperature(value)
-//      case None        => TemperatureNotAvailable
-//    }
-//
-//    val deviceId = response.
-//    repliesSoFar += (deviceId -> reading)
-//    stillWaiting -= deviceId
-//
-//    respondWhenAllCollected()
-//  }
-//
-//  private def onDeviceTerminated(deviceId: String): Behavior[DGQueryCommand] = {
-//    if (stillWaiting(deviceId)) {
-//      repliesSoFar += (deviceId -> DeviceNotAvailable)
-//      stillWaiting -= deviceId
-//    }
-//    respondWhenAllCollected()
-//  }
-//
-//  private def onCollectionTimout(): Behavior[DGQueryCommand] = {
-//    repliesSoFar ++= stillWaiting.map(deviceId => deviceId -> DeviceTimedOut)
-//    stillWaiting = Set.empty
-//    respondWhenAllCollected()
-//  }
+  override def onMessage(msg: DGQueryCommand): Behavior[DGQueryCommand] =
+    msg match {
+      case WrappedRespondTemperature(response) => onRespondTemperature(response)
+      case DeviceTerminated(deviceId)          => onDeviceTerminated(deviceId)
+      case CollectionTimeout                   => onCollectionTimout()
+    }
+
+  private def onRespondTemperature(response: Device.RespondTemperature): Behavior[DGQueryCommand] = {
+    val reading = response.value match {
+      case Some(value) => Temperature(value)
+      case None        => TemperatureNotAvailable
+    }
+
+    val deviceId = response.deviceId
+    repliesSoFar += (deviceId -> reading)
+    stillWaiting -= deviceId
+
+    respondWhenAllCollected()
+  }
+
+  private def onDeviceTerminated(deviceId: String): Behavior[DGQueryCommand] = {
+    if (stillWaiting(deviceId)) {
+      // Replied as deviceId -> DeviceNotAvailable is a valid response
+      repliesSoFar += (deviceId -> DeviceNotAvailable)
+      // Remove from stillWaiting
+      stillWaiting -= deviceId
+    }
+    respondWhenAllCollected()
+  }
+
+  private def onCollectionTimout(): Behavior[DGQueryCommand] = {
+    repliesSoFar ++= stillWaiting.map(deviceId => deviceId -> DeviceTimedOut)
+    stillWaiting = Set.empty
+    respondWhenAllCollected()
+  }
+
+  private def respondWhenAllCollected(): Behavior[DGQueryCommand] = {
+    // No more await, use requester to Respond with valid results ( 4 cases described above)
+    if (stillWaiting.isEmpty) {
+      requester ! RespondAllTemperatures(requestId, repliesSoFar)
+      // Return this behavior from message processing to signal that this actor shall terminate voluntarily
+      // DeviceGroupQuery actor should stop in this case, as it's done already
+      Behaviors.stopped
+    } else {
+      // Continue to wait? with this behavior?
+      this
+    }
+  }
+
 }

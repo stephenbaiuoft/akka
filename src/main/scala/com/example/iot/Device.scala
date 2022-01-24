@@ -52,6 +52,7 @@ class Device(context: ActorContext[Device.Command], groupId: String, deviceId: S
         this
 
       case ReadTemperature(id, replyTo) =>
+        // Note deviceId is given in this actor when creation
         replyTo ! RespondTemperature(id, deviceId, lastTemperatureReading)
         this
 
