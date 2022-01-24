@@ -1,14 +1,15 @@
 package com.example
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import com.example.iot.{Device, DeviceGroup}
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.duration.DurationInt
 
 class DeviceSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
 
-  import Device._
-  import DeviceManager._
+  import com.example.iot.Device._
+  import com.example.iot.DeviceManager._
 
   "Device actor" must {
 
@@ -108,7 +109,7 @@ class DeviceSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
       // Add the part for ReadTemperature
       val readProbe = createTestProbe[RespondTemperature]()
       deviceActor1 ! ReadTemperature(2, readProbe.ref)
-      readProbe.expectMessage(RespondTemperature(2, Some(1.0)))
+      readProbe.expectMessage(RespondTemperature(2, "device1", Some(1.0)))
     }
 
     "ignore requests for wrong groupId" in {
@@ -140,7 +141,7 @@ class DeviceSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
 
       deviceActor ! Device.ReadTemperature(4, readProbe.ref)
       readProbe.expectMessage(
-        Device.RespondTemperature(requestId = 4, Some(70.0))
+        Device.RespondTemperature(requestId = 4, "device", Some(70.0))
       )
     }
 
