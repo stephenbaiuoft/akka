@@ -3,7 +3,9 @@ package com.example.iot
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors, LoggerOps}
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import com.example.iot.DeviceGroup.DeviceTerminated
-import com.example.iot.DeviceManager.{DeviceRegistered, ReplyDeviceList, RequestDeviceList, RequestTrackDevice}
+import com.example.iot.DeviceManager.{DeviceRegistered, ReplyDeviceList, RequestAllTemperatures, RequestDeviceList, RequestTrackDevice}
+
+import scala.concurrent.duration.DurationInt
 
 
 // Working with Device Group (Hierarchy Design for Actor Protocols)
@@ -48,6 +50,20 @@ class DeviceGroup(context: ActorContext[DeviceGroup.DGCommand], groupId: String)
 
   override def onMessage(msg: DeviceGroup.DGCommand): Behavior[DeviceGroup.DGCommand] =
     msg match {
+      // Adding query capability to the group
+      case RequestAllTemperatures(requestId, gId, replyTo) =>
+        if (gId == groupId) {
+          // Create QueryGroupCommand Anonymous
+          // Why Anonymous?? Because of the replyTo ==> it's already got a hold of regardless
+          context.spawnAnonymous(
+            DeviceGroupQuery(deviceIdToActor, requestId = requestId, requester = replyTo, 3.seconds)
+          )
+          this
+        } else {
+          // Return this behavior from message processing in order to advise the system to reuse the previous behavior,
+          Behaviors.unhandled
+        }
+
       case RequestDeviceList(requestId, gId, replyTo) =>
         if (gId == groupId) {
           replyTo ! ReplyDeviceList(requestId, deviceIdToActor.keySet)
